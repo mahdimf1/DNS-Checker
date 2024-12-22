@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Function to display current DNS settings
+display_current_dns() {
+    echo "Current DNS settings:"
+    cat /etc/resolv.conf | grep "nameserver"
+    echo
+}
+
 # Function to prompt for and set DNS servers
 set_dns_servers() {
     echo "Please enter the DNS servers you wish to use, separated by spaces (e.g., '8.8.8.8 8.8.4.4 1.1.1.1'):"
@@ -14,39 +21,62 @@ set_dns_servers() {
     # Update the DNS settings immediately
     echo -e "$EXPECTED_DNS" | sudo tee /etc/resolv.conf > /dev/null
     echo "DNS settings updated."
+
+    # Restart the resolvconf service to apply changes
+    sudo systemctl restart resolvconf
+    echo "resolvconf service restarted to apply DNS settings."
 }
 
-# Function to install and configure a cron job
-install_cron_job() {
-    local cron_hour="$1"
-
-    # Script path and content
-    SCRIPT_PATH="/usr/local/bin/check_dns.sh"
-    echo -e "#!/bin/bash
-echo -e \"$EXPECTED_DNS\" | sudo tee /etc/resolv.conf > /dev/null
-echo \"Updated DNS settings.\"
-" > "$SCRIPT_PATH"
-
-    chmod +x "$SCRIPT_PATH"
-
-    # Add cron job
-    (crontab -l 2>/dev/null; echo "0 $cron_hour * * * $SCRIPT_PATH") | crontab -
+# Function to install DNS tools
+install_dns_tools() {
+    echo "Installing and configuring DNS tools..."
+    sudo apt-get update -y && sudo apt-get upgrade -y
+    sudo apt install resolvconf -y
+    sudo systemctl enable resolvconf
+    sudo systemctl restart resolvconf
+    echo "DNS tools installed and configured."
 }
 
-# Prompt for DNS servers
-set_dns_servers
+# Function to display current cron jobs
+display_cron_jobs() {
+    echo "Current scheduled cron jobs:"
+    crontab -l
+}
 
-# Prompt user for cron scheduling hour
-echo "Please enter the hour (0-23) to run the script daily:"
-read cron_hour
+# Function to delete a cron job
+delete_cron_job() {
+    echo "Enter the line number of the cron job you wish to delete:"
+    crontab -l
+    echo "---------------------------------------------"
+    read line_num
+    # Delete the specific cron job
+    crontab -l | sed "${line_num}d" | crontab -
+    echo "Cron job deleted."
+}
 
-# Validate the input
-while ! [[ "$cron_hour" =~ ^[0-9]+$ ]] || [ "$cron_hour" -lt 0 ] || [ "$cron_hour" -gt 23 ]; do
-    echo "Invalid input. Please enter a valid hour (0-23):"
-    read cron_hour
+# Function to clear the screen and show the menu
+show_menu() {
+    clear
+    echo "Starting DNS Configuration Script"
+    display_current_dns
+
+    echo "Select an option:"
+    echo "1. Install DNS Tools"
+    echo "2. Set DNS Servers"
+    echo "3. Delete a Cron Job"
+    echo "0. Exit"
+    read -p "Choice: " choice
+}
+
+# Main script execution loop
+while true; do
+    show_menu
+    case "$choice" in
+        1) install_dns_tools ;;
+        2) set_dns_servers ;;
+        3) delete_cron_job ;;
+        0) echo "Exiting script."; break ;;
+        *) echo "Invalid option. Please try again." ;;
+    esac
+    echo
 done
-
-# Execute the function to install cron job
-install_cron_job "$cron_hour"
-
-echo "Installation and configuration completed."
